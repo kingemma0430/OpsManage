@@ -68,6 +68,7 @@ class RedisWebTerminal(WebsocketConsumer,RedisManage):
             return True
         
         self.send("命令未授权, 联系管理员授权\r\n") 
+        self.send(self.redis_pool.prompt())
         return False                                     
     
     def connect(self):
@@ -77,13 +78,16 @@ class RedisWebTerminal(WebsocketConsumer,RedisManage):
         self.accept()
 
         dbServer = self._check_user_perms(self.scope['url_route']['kwargs']['id'])
-        
+
         if not dbServer:
             self.send(text_data="403。。。。数据库未授权!")   
             self.close()        
         
+        
         #创建Redis连接
-        self.redis_pool = RedisPool(dbServer)
+        self.redis_pool = RedisPool(dbServer).start_up()
+        
+        self.send(self.redis_pool.prompt())
     
            
     def receive(self, text_data=None, bytes_data=None):
@@ -91,6 +95,7 @@ class RedisWebTerminal(WebsocketConsumer,RedisManage):
             result = self.redis_pool.execute(text_data)
             #这里记录用户执行的命令
             self.send(self.redis_pool.format_result(result))
+            self.send(self.redis_pool.prompt())
 
            
         
@@ -99,5 +104,6 @@ class RedisWebTerminal(WebsocketConsumer,RedisManage):
 
     def disconnect(self, close_code):    
         async_to_sync(self.channel_layer.group_discard)(self.group_name, self.channel_name)
+        self.redis_pool.close()
         self.close()
         
